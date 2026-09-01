@@ -1,0 +1,38 @@
+# Python virtual environments & packages
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Databases, vector stores & runtime state
+chroma_db/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+
+# Logs & process files
+*.log
+a2r-server.err.log
+a2r-server.out.log
+
+# Environment variables & secrets
+.env
+.env.local
+*.key
+*.pem
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Agent scratch directory
+scratch/

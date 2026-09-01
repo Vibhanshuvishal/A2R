@@ -1,35 +1,28 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Any
+from pydantic import BaseModel, Field
 
-from a2r.llm.provider import LLMProvider, ModelUnavailable
-
-
-@dataclass
-class QueryAnalysis:
-    domain: str
-    confidence: float
-    reason: str
+from a2r.llm.provider import DeterministicProvider, LLMProvider, ModelUnavailable
 
 
-FALLBACK_KEYWORDS = {
-    "billing": ["invoice", "payment", "refund", "credit", "subscription", "price", "annual", "monthly", "tax"],
-    "product": ["api", "webhook", "integration", "export", "sla", "limit", "rate", "mobile", "permission"],
-    "hr": ["leave", "pto", "holiday", "remote", "conduct", "expense", "performance", "benefits", "onboarding"],
-}
+class QueryAnalysis(BaseModel):
+    domain: str = Field(pattern="^(billing|product|hr|general)$")
+    intent: str = Field(pattern="^(policy_lookup|how_to|troubleshoot|comparison|other)$")
+    complexity: str = Field(pattern="^(simple|medium|complex)$")
+    entities: list[str] = Field(min_length=1, max_length=5)
 
 
 def analyze_query(query: str, provider: LLMProvider) -> tuple[QueryAnalysis, bool]:
-    prompt = f"Analyze query: {query}"
-    try:
-        raw = provider.complete(prompt, json_mode=True)
-        data = json.loads(raw)
-        return QueryAnalysis(data["domain"], float(data["confidence"]), data.get("reason", "")), False
-    except (ModelUnavailable, json.JSONDecodeError, KeyError):
-        q = query.lower()
-        for domain, words in FALLBACK_KEYWORDS.items():
-            if any(w in q for w in words):
-                return QueryAnalysis(domain, 0.6, "keyword heuristic"), True
-        return QueryAnalysis("product", 0.33, "default"), True
+    prompt = f"""TASK: classify_query
+Return only JSON with domain (billing, product, hr, general), intent
+(policy_lookup, how_to, troubleshoot, comparison, other), complexity
+(simple, medium, complex), and 1-5 entities.\nQUERY: {query}"""
+    for attempt in range(2):
+        try:
+            return QueryAnalysis.model_validate(json.loads(provider.complete(prompt, json_mode=True))), False
+        except (ValueError, ModelUnavailable):
+            if attempt == 0:
+                continue
+    fallback = DeterministicProvider()
+    return QueryAnalysis.model_validate(json.loads(fallback.complete(prompt, json_mode=True))), True

@@ -1,31 +1,40 @@
 from __future__ import annotations
 
-from typing import Any
-from a2r.llm.provider import LLMProvider
+from typing import Iterator
 
-
-def chunk_text(text: str, chunk_words: int, overlap_words: int) -> list[str]:
-    words = text.split()
-    if not words:
-        return []
-    chunks = []
-    start = 0
-    step = max(1, chunk_words - overlap_words)
-    while start < len(words):
-        chunk = " ".join(words[start : start + chunk_words])
-        chunks.append(chunk)
-        start += step
-    return chunks
+from a2r.llm.provider import LLMProvider, ModelUnavailable
 
 
 class RAGPipeline:
     def __init__(self, provider: LLMProvider, min_similarity: float):
-        self.provider = provider
-        self.min_similarity = min_similarity
+        self.provider, self.min_similarity = provider, min_similarity
 
-    def generate(self, query: str, retrieved_chunks: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-        if not retrieved_chunks:
-            return "Answer outside the indexed knowledge base.", []
-        context = "\n---\n".join(c["text"] for c in retrieved_chunks)
-        prompt = f"Answer using only context:\n{context}\n\nQuestion: {query}\nAnswer:"
-        return self.provider.complete(prompt), retrieved_chunks
+    def run(self, query: str, chunks: list[dict], conversation_context: str = "") -> tuple[str, float, bool]:
+        if not chunks or max(chunk["score"] for chunk in chunks) < self.min_similarity:
+            return "", 0.0, False
+        confidence = sum(chunk["score"] for chunk in chunks[:3]) / min(3, len(chunks))
+        context = "\n\n".join(f"[{chunk['source']}#{chunk['chunk_index']}] {chunk['text']}" for chunk in chunks[:3])
+        history_block = f"\nCONVERSATION HISTORY:\n{conversation_context}\n" if conversation_context else ""
+        prompt = f"""Answer using only CONTEXT.{history_block} If it is insufficient, output INSUFFICIENT_CONTEXT.
+QUESTION: {query}\nCONTEXT:\n{context}"""
+        try:
+            answer = self.provider.complete(prompt)
+            if not answer or "INSUFFICIENT_CONTEXT" in answer.upper():
+                return "", 0.0, False
+            return answer.strip(), confidence, False
+        except ModelUnavailable:
+            # Extractive fallback retains a source and cannot introduce new facts.
+            return chunks[0]["text"], confidence, True
+
+    def stream_run(self, query: str, chunks: list[dict], conversation_context: str = "") -> Iterator[str]:
+        if not chunks or max(chunk["score"] for chunk in chunks) < self.min_similarity:
+            return
+        context = "\n\n".join(f"[{chunk['source']}#{chunk['chunk_index']}] {chunk['text']}" for chunk in chunks[:3])
+        history_block = f"\nCONVERSATION HISTORY:\n{conversation_context}\n" if conversation_context else ""
+        prompt = f"""Answer using only CONTEXT.{history_block} If it is insufficient, output INSUFFICIENT_CONTEXT.
+QUESTION: {query}\nCONTEXT:\n{context}"""
+        try:
+            for token in self.provider.stream_complete(prompt):
+                yield token
+        except ModelUnavailable:
+            yield chunks[0]["text"]

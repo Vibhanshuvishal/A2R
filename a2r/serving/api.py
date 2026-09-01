@@ -58,9 +58,6 @@ def create_app(engine: A2REngine | None = None, mount_ui: bool = True) -> FastAP
 
     @app.get("/query-stream")
     async def handle_query_stream_get(query: str, session_id: str = ""):
-        if not query.strip():
-            raise HTTPException(status_code=400, detail="Query parameter cannot be empty")
-
         def event_generator():
             try:
                 for event in engine.stream_query(query, session_id=session_id):
@@ -81,18 +78,17 @@ def create_app(engine: A2REngine | None = None, mount_ui: bool = True) -> FastAP
     @app.post("/feedback", response_model=FeedbackResponse)
     async def handle_feedback(request: FeedbackRequest):
         weight = engine.feedback(request.query_id, request.signal)
-        if weight is None:
-            raise HTTPException(status_code=404, detail="Unknown query ID or feedback was already submitted")
-        return FeedbackResponse(acknowledged=True, new_weight=weight)
+        return FeedbackResponse(acknowledged=weight is not None, new_weight=weight)
+
+    # Multi-turn session endpoints
+    @app.post("/sessions")
+    async def create_session(req: SessionCreateRequest):
+        sess_id = engine.session_manager.create_session(user_id=req.user_id, title=req.title)
+        return {"session_id": sess_id, "title": req.title}
 
     @app.get("/sessions")
-    async def list_sessions():
-        return engine.session_manager.list_sessions()
-
-    @app.post("/sessions")
-    async def create_session(request: SessionCreateRequest):
-        session_id = engine.session_manager.create_session(request.user_id, request.title)
-        return {"id": session_id, "title": request.title}
+    async def list_sessions(user_id: str = "default", limit: int = 30):
+        return engine.session_manager.list_sessions(user_id=user_id, limit=limit)
 
     @app.get("/sessions/{session_id}", response_model=SessionDetailResponse)
     async def get_session(session_id: str):
@@ -100,24 +96,25 @@ def create_app(engine: A2REngine | None = None, mount_ui: bool = True) -> FastAP
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
         messages = engine.session_manager.load_session_messages(session_id)
-        return {"session": sess, "messages": messages}
+        return SessionDetailResponse(session=sess, messages=messages)
 
     @app.patch("/sessions/{session_id}")
-    async def update_session_title(session_id: str, request: SessionUpdateTitleRequest):
-        ok = engine.session_manager.update_title(session_id, request.title)
+    async def update_session_title(session_id: str, req: SessionUpdateTitleRequest):
+        ok = engine.session_manager.update_title(session_id, req.title)
         if not ok:
-            raise HTTPException(status_code=404, detail="Session not found")
-        return {"acknowledged": True}
+            raise HTTPException(status_code=404, detail="Session not found or not modified")
+        return {"acknowledged": True, "title": req.title}
 
     @app.delete("/sessions/{session_id}")
-    async def delete_session(session_id: str):
-        ok = engine.session_manager.delete_session(session_id)
+    async def delete_session(session_id: str, hard: bool = False):
+        ok = engine.session_manager.delete_session(session_id, soft=not hard)
         if not ok:
             raise HTTPException(status_code=404, detail="Session not found")
         return {"acknowledged": True}
 
+    # Semantic cache endpoints
     @app.get("/cache/stats", response_model=CacheStatsResponse)
-    async def get_cache_stats():
+    async def cache_stats():
         if not engine.cache:
             return {
                 "cache_size": 0,
@@ -149,11 +146,9 @@ def create_app(engine: A2REngine | None = None, mount_ui: bool = True) -> FastAP
 
     # Mount UI layers
     if mount_ui:
+        from fastapi.responses import HTMLResponse
         from gradio import mount_gradio_app
         from ui.app import build_ui
-
-        # Mount Gradio at /gradio
-        app = mount_gradio_app(app, build_ui(engine), path="/gradio")
 
         # Mount static directory for modern custom SPA at /
         static_dir = Path(__file__).parents[2] / "ui" / "static"
@@ -162,7 +157,11 @@ def create_app(engine: A2REngine | None = None, mount_ui: bool = True) -> FastAP
 
             @app.get("/")
             async def serve_index():
-                return FileResponse(static_dir / "index.html")
+                index_path = static_dir / "index.html"
+                return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+
+        # Mount Gradio at /gradio
+        app = mount_gradio_app(app, build_ui(engine), path="/gradio")
 
     return app
 

@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2r"
 version = "0.2.0"
-description = "A2R — Adaptive Agentic Retrieval Router: 100% Local-first RAG with Contextual Bandit Routing, Semantic Caching, Multi-turn Chat, and SSE Streaming"
+description = "Adaptive, local-first retrieval router for domain knowledge bases"
 readme = "README.md"
-authors = [{ name = "Vibhanshu Vishal" }]
-license = { text = "MIT" }
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Vibhanshu Vishal", email = "111078001+Vibhanshuvishal@users.noreply.github.com" }]
 keywords = [
   "rag",
   "retrieval-augmented-generation",
@@ -32,6 +32,7 @@ dependencies = [
   "pyyaml>=6.0",
   "sentence-transformers>=3.0",
   "uvicorn>=0.30",
+  "aiofiles>=24.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +45,4 @@ Repository = "https://github.com/Vibhanshuvishal/A2R"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.setuptools.packages.find]
-include = ["a2r*"]
+python_files = ["test_*.py"]

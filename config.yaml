@@ -1,0 +1,47 @@
+runtime:
+  mode: local # local: persistent API + UI; public_demo: Gradio demo, non-persistent learning
+  max_query_chars: 2000
+  request_timeout_seconds: 30
+llm:
+  provider: ollama
+  model: qwen3:4b
+  public_demo_model: Qwen/Qwen3-1.7B
+  ollama_base_url: http://localhost:11434
+  temperature: 0.0
+embedding:
+  model: BAAI/bge-small-en-v1.5
+  batch_size: 32
+vector_store:
+  persist_dir: ./chroma_db
+  collection_prefix: a2r
+  top_k: 5
+  min_similarity: 0.35
+  chunk_words: 180
+  chunk_overlap_words: 30
+router:
+  learning_rate: 0.05
+  exploration_rate: 0.10
+  min_weight: 0.10
+  weights_db: ./a2r_weights.sqlite
+storage:
+  prediction_db: ./prediction_log.sqlite
+  session_db: ./chat_sessions.sqlite
+cache:
+  enabled: true
+  threshold: 0.85
+  db_path: ./query_cache.sqlite
+sessions:
+  max_history_turns: 10
+web_fallback:
+  enabled: true
+  max_results: 3
+pipelines:
+  - id: billing
+    name: Billing docs
+    data_dir: ./data/billing
+  - id: product
+    name: Product docs
+    data_dir: ./data/product
+  - id: hr
+    name: HR and policy docs
+    data_dir: ./data/hr

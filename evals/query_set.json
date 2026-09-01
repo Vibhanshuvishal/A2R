@@ -1,0 +1,17 @@
+[
+  {"query": "How do I download my invoice for last month?", "expected": "billing"},
+  {"query": "What is the refund policy for enterprise accounts?", "expected": "billing"},
+  {"query": "Can we change payment terms to net-60?", "expected": "billing"},
+  {"query": "Where can I find our monthly credit balance?", "expected": "billing"},
+  {"query": "What are the rate limits for the v2 search endpoint?", "expected": "product"},
+  {"query": "Does the platform support webhooks for billing events?", "expected": "product"},
+  {"query": "How do I generate an API key for my team member?", "expected": "product"},
+  {"query": "What is the SLA uptime guarantee for enterprise?", "expected": "product"},
+  {"query": "How many days of parental leave are provided?", "expected": "hr"},
+  {"query": "What is the policy for remote work stipends?", "expected": "hr"},
+  {"query": "Who approves my annual performance review self-assessment?", "expected": "hr"},
+  {"query": "What are the core hours for full-time employees?", "expected": "hr"},
+  {"query": "Who won the 2022 World Cup?", "expected": "out_of_scope"},
+  {"query": "Can you write a poem about the ocean?", "expected": "out_of_scope"},
+  {"query": "What is the capital of France?", "expected": "out_of_scope"}
+]

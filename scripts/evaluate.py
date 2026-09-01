@@ -1,35 +1,34 @@
-from a2r.graph import build_engine
-from a2r.settings import load_config, project_path
-from tests.conftest import FakeVectorStore
+"""Run a versioned, local-only evaluation after ingesting the bundled data."""
+from __future__ import annotations
+
 import json
+from pathlib import Path
+import statistics
 import time
 
+from a2r.graph import build_engine
 
-def main():
-    config = load_config()
-    data = json.loads(project_path("evals/query_set.json").read_text())
-    chunks = {
-        "billing": [{"text": "Refund requests are processed in thirty days.", "source": "billing.md", "chunk_index": 0, "score": 0.9}],
-        "product": [{"text": "Rate limits allow 120 requests per minute.", "source": "product.md", "chunk_index": 0, "score": 0.9}],
-        "hr": [{"text": "Core hours are 10am to 4pm.", "source": "hr.md", "chunk_index": 0, "score": 0.9}],
+
+def main() -> None:
+    cases = json.loads((Path(__file__).parents[1] / "evals" / "query_set.json").read_text(encoding="utf-8"))
+    engine = build_engine()
+    engine.ensure_ingested()
+    outcomes, latencies = [], []
+    for case in cases:
+        started = time.perf_counter()
+        result = engine.query(case["query"])
+        latencies.append((time.perf_counter() - started) * 1000)
+        correct_domain = result["domain"] == case["domain"]
+        correct_source = (result["pipeline_used"] == case["pipeline"]) if case["answerable"] else result["answer_source"] == "out_of_scope"
+        outcomes.append({"query": case["query"], "domain_ok": correct_domain, "route_ok": correct_source, "latency_ms": round(latencies[-1], 1)})
+    summary = {
+        "cases": len(cases),
+        "domain_accuracy": round(sum(item["domain_ok"] for item in outcomes) / len(outcomes), 3),
+        "route_or_out_of_scope_accuracy": round(sum(item["route_ok"] for item in outcomes) / len(outcomes), 3),
+        "median_latency_ms": round(statistics.median(latencies), 1),
+        "results": outcomes,
     }
-    engine = build_engine(config, vector_store=FakeVectorStore(chunks))
-    correct = 0
-    total = len(data)
-    latencies = []
-
-    for item in data:
-        start = time.perf_counter()
-        result = engine.query(item["query"])
-        latencies.append(time.perf_counter() - start)
-        predicted = result["pipeline_used"] if result["answer_source"] == "rag_pipeline" else "out_of_scope"
-        if predicted == item["expected"]:
-            correct += 1
-
-    latencies.sort()
-    median_latency = latencies[len(latencies) // 2]
-    print(f"Accuracy: {correct / total:.2%} ({correct}/{total})")
-    print(f"Median latency: {median_latency * 1000:.1f}ms")
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

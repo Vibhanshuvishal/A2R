@@ -1,22 +1,22 @@
-from a2r.pipelines.rag_pipeline import chunk_text
+from __future__ import annotations
+
+import argparse
+import time
+
 from a2r.settings import load_config, project_path
-from a2r.storage.vector_store import VectorStoreManager
+from a2r.storage import VectorStoreManager
 
 
 def main():
-    config = load_config()
+    parser = argparse.ArgumentParser(description="Ingest A2R local knowledge bases")
+    parser.add_argument("--config", default="config.yaml")
+    args = parser.parse_args()
+    config = load_config(args.config)
     store = VectorStoreManager(config)
-    chunk_words = config["vector_store"]["chunk_words"]
-    overlap_words = config["vector_store"]["chunk_overlap_words"]
-
     for pipeline in config["pipelines"]:
-        store.reset_pipeline(pipeline["id"])
-        data_dir = project_path(pipeline["data_dir"])
-        for file in data_dir.glob("*.md"):
-            chunks = chunk_text(file.read_text(encoding="utf-8"), chunk_words, overlap_words)
-            store.add_chunks(pipeline["id"], file.name, chunks)
-
-    print("Ingestion complete.")
+        started = time.monotonic()
+        count = store.ingest_directory(pipeline["id"], project_path(pipeline["data_dir"]))
+        print(f"{pipeline['name']}: {count} new chunks in {time.monotonic() - started:.2f}s")
 
 
 if __name__ == "__main__":
